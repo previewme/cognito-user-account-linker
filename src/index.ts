@@ -1,5 +1,5 @@
 import { PreSignUpTriggerEvent } from 'aws-lambda';
-import { CognitoIdentityServiceProvider } from 'aws-sdk';
+import AWS, { CognitoIdentityServiceProvider } from 'aws-sdk';
 import { AdminCreateUserResponse, ListUsersResponse } from 'aws-sdk/clients/cognitoidentityserviceprovider';
 import { generate } from 'generate-password';
 
@@ -79,6 +79,27 @@ export async function handler(event: PreSignUpTriggerEvent): Promise<PreSignUpTr
             if (cognitoNativeUsername === undefined) {
                 throw Error('Username not found');
             }
+            const message = {
+                default: 'A message.',
+                email: 'A message for email.',
+                http: 'A message for HTTP.',
+                https: 'A message for HTTPS.',
+                sqs: 'A message for Amazon SQS.'
+            };
+            const sns = new AWS.SNS();
+            sns.publish(
+                {
+                    TopicArn: 'arn:aws:sns:us-east-1:371032233725:user-signup',
+                    Message: JSON.stringify(message)
+                },
+                function (err) {
+                    if (err) {
+                        console.error('error publishing to SNS');
+                    } else {
+                        console.info('message published to SNS');
+                    }
+                }
+            );
             // await linkUserAccounts(cognitoNativeUsername, userPoolId, providerName, providerUserId, client);
             // event.response.autoVerifyEmail = true;
             // event.response.autoConfirmUser = true;
