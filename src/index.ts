@@ -87,7 +87,7 @@ export async function handler(event: PreSignUpTriggerEvent): Promise<PreSignUpTr
                 },
                 function (err) {
                     if (err) {
-                        console.error('error publishing to SNS');
+                        console.error('error publishing to SNS', err);
                     } else {
                         console.info('message published to SNS');
                     }
