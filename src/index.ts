@@ -80,16 +80,23 @@ export async function handler(event: PreSignUpTriggerEvent): Promise<PreSignUpTr
                 throw Error('Username not found');
             }
             const sns = new AWS.SNS();
+            const message = {
+                cognitoNativeUsername,
+                userPoolId,
+                providerName,
+                providerUserId,
+                region: event.region
+            };
             sns.publish(
                 {
-                    Message: 'Test publish to SNS from Lambda',
+                    Message: JSON.stringify(message),
                     TopicArn: 'arn:aws:sns:us-east-1:371032233725:user-signup'
                 },
                 function (err) {
                     if (err) {
                         console.error('error publishing to SNS', err);
                     } else {
-                        console.info('message published to SNS');
+                        console.info(message, 'published to SNS');
                     }
                 }
             );
