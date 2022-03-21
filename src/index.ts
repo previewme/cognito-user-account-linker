@@ -70,7 +70,7 @@ export async function handler(event: PreSignUpTriggerEvent): Promise<PreSignUpTr
             if (cognitoUsername === undefined) {
                 throw Error('Username not found');
             }
-            await linkUserAccounts(cognitoUsername, userPoolId, providerName, providerUserId, client);
+            // await linkUserAccounts(cognitoUsername, userPoolId, providerName, providerUserId, client);
         } else {
             const newCognitoUser = await createUser(userPoolId, email, client);
             await setUserPassword(userPoolId, email, client);
