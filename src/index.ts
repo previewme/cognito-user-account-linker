@@ -79,18 +79,11 @@ export async function handler(event: PreSignUpTriggerEvent): Promise<PreSignUpTr
             if (cognitoNativeUsername === undefined) {
                 throw Error('Username not found');
             }
-            const message = {
-                default: 'A message.',
-                email: 'A message for email.',
-                http: 'A message for HTTP.',
-                https: 'A message for HTTPS.',
-                sqs: 'A message for Amazon SQS.'
-            };
             const sns = new AWS.SNS();
             sns.publish(
                 {
-                    TopicArn: 'arn:aws:sns:us-east-1:371032233725:user-signup',
-                    Message: JSON.stringify(message)
+                    Message: 'Test publish to SNS from Lambda',
+                    TopicArn: 'arn:aws:sns:us-east-1:371032233725:user-signup'
                 },
                 function (err) {
                     if (err) {
