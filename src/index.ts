@@ -80,7 +80,6 @@ export async function handler(event: PreSignUpTriggerEvent): Promise<PreSignUpTr
                 throw Error('Username not found');
             }
             await linkUserAccounts(cognitoNativeUsername, userPoolId, providerName, providerUserId, client);
-            event.response.autoVerifyEmail = true;
             event.response.autoConfirmUser = true;
         }
     }
