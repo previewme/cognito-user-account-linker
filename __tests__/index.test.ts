@@ -158,7 +158,6 @@ describe('AWS Cognito account linking', () => {
 
         const result = await handler(cognitoSocialLogin);
 
-        expect(result.response.autoVerifyEmail).toBeTruthy();
         expect(result.response.autoConfirmUser).toBeTruthy();
         expect(mockLinkUser).toHaveBeenCalledWith({
             DestinationUser: {
