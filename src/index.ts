@@ -87,19 +87,21 @@ export async function handler(event: PreSignUpTriggerEvent): Promise<PreSignUpTr
                 providerUserId,
                 region: event.region
             };
-            sns.publish(
-                {
-                    Message: JSON.stringify(message),
-                    TopicArn: 'arn:aws:sns:us-east-1:371032233725:user-signup'
-                },
-                function (err) {
-                    if (err) {
-                        console.error('error publishing to SNS', err);
-                    } else {
-                        console.info(message, 'published to SNS');
+            await sns
+                .publish(
+                    {
+                        Message: JSON.stringify(message),
+                        TopicArn: 'arn:aws:sns:us-east-1:371032233725:user-signup'
+                    },
+                    function (err) {
+                        if (err) {
+                            console.error('error publishing to SNS', err);
+                        } else {
+                            console.info(message, 'published to SNS');
+                        }
                     }
-                }
-            );
+                )
+                .promise();
             // await linkUserAccounts(cognitoNativeUsername, userPoolId, providerName, providerUserId, client);
             // event.response.autoVerifyEmail = true;
             // event.response.autoConfirmUser = true;
