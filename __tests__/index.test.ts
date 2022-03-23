@@ -155,10 +155,7 @@ describe('AWS Cognito account linking', () => {
                 promise: jest.fn(() => Promise.resolve({}))
             };
         });
-
-        const result = await handler(cognitoSocialLogin);
-
-        expect(result.response.autoConfirmUser).toBeTruthy();
+        await handler(cognitoSocialLogin);
         expect(mockLinkUser).toHaveBeenCalledWith({
             DestinationUser: {
                 ProviderAttributeValue: 'a33faa43-4430-46b9-9604-54f42bd12d51',
