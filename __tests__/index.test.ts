@@ -149,41 +149,41 @@ describe('AWS Cognito account linking', () => {
         await expect(handler(cognitoSocialLogin)).rejects.toThrowError('Username not found');
     });
 
-    // test('No native cognito user when using social login', async () => {
-    //     mockListUsers = jest.fn(() => {
-    //         return {
-    //             promise: jest.fn(() => Promise.resolve({}))
-    //         };
-    //     });
-    //
-    //     const result = await handler(cognitoSocialLogin);
-    //
-    //     expect(result.response.autoVerifyEmail).toBeTruthy();
-    //     expect(result.response.autoConfirmUser).toBeTruthy();
-    //     expect(mockLinkUser).toHaveBeenCalledWith({
-    //         DestinationUser: {
-    //             ProviderAttributeValue: 'a33faa43-4430-46b9-9604-54f42bd12d51',
-    //             ProviderName: 'Cognito'
-    //         },
-    //         SourceUser: {
-    //             ProviderAttributeName: 'Cognito_Subject',
-    //             ProviderAttributeValue: '1147527301736',
-    //             ProviderName: 'Google'
-    //         },
-    //         UserPoolId: 'eu-central-1_7HLvRT'
-    //     });
-    //     expect(mockSetUserPassword).toHaveBeenCalledWith(
-    //         expect.objectContaining({
-    //             UserPoolId: 'eu-central-1_7HLvRT',
-    //             Username: 'test@gmail.com',
-    //             Permanent: true,
-    //             Password: expect.any(String)
-    //         })
-    //     );
-    //     expect(mockLinkUser).toBeCalledTimes(1);
-    //     expect(mockSetUserPassword).toBeCalledTimes(1);
-    //     expect(mockListUsers).toBeCalledTimes(1);
-    // });
+    test('No native cognito user when using social login', async () => {
+        mockListUsers = jest.fn(() => {
+            return {
+                promise: jest.fn(() => Promise.resolve({}))
+            };
+        });
+
+        const result = await handler(cognitoSocialLogin);
+
+        expect(result.response.autoVerifyEmail).toBeTruthy();
+        expect(result.response.autoConfirmUser).toBeTruthy();
+        expect(mockLinkUser).toHaveBeenCalledWith({
+            DestinationUser: {
+                ProviderAttributeValue: 'a33faa43-4430-46b9-9604-54f42bd12d51',
+                ProviderName: 'Cognito'
+            },
+            SourceUser: {
+                ProviderAttributeName: 'Cognito_Subject',
+                ProviderAttributeValue: '1147527301736',
+                ProviderName: 'Google'
+            },
+            UserPoolId: 'eu-central-1_7HLvRT'
+        });
+        expect(mockSetUserPassword).toHaveBeenCalledWith(
+            expect.objectContaining({
+                UserPoolId: 'eu-central-1_7HLvRT',
+                Username: 'test@gmail.com',
+                Permanent: true,
+                Password: expect.any(String)
+            })
+        );
+        expect(mockLinkUser).toBeCalledTimes(1);
+        expect(mockSetUserPassword).toBeCalledTimes(1);
+        expect(mockListUsers).toBeCalledTimes(1);
+    });
 
     test('No username when creating user', async () => {
         mockListUsers = jest.fn(() => {
