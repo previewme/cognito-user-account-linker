@@ -57,6 +57,7 @@ async function setUserPassword(userPoolId: string, email: string, client: Cognit
 }
 
 export async function handler(event: PreSignUpTriggerEvent): Promise<PreSignUpTriggerEvent> {
+    // eslint-disable-next-line no-console
     console.log('dx:event: ', event);
     const client = new CognitoIdentityServiceProvider({ region: event.region });
     const email = event.request.userAttributes.email;
