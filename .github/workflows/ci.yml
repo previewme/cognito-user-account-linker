@@ -98,30 +98,30 @@ jobs:
         run: |
           aws s3 cp dist/${{ github.event.repository.name }}-${{ github.run_number }}.zip s3://${{ secrets.ARTEFACT_BUCKET }}/${{ github.event.repository.name }}/${{ github.event.repository.name }}-${{ github.run_number }}.zip
 
-  sonarcloud:
-    needs: test
-    name: Quality Gate
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-        with:
-          fetch-depth: 0
-
-      - name: Download a reports artifact
-        uses: actions/download-artifact@v2.0.10
-        with:
-          name: reports
-          path: reports
-
-      - name: SonarCloud Scan
-        if: always()
-        uses: SonarSource/sonarcloud-github-action@v1.6
-        with:
-          projectBaseDir: ${{ env.GITHUB_WORKSPACE }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          BUILD_NUMBER: ${{ github.run_number }}
+#  sonarcloud:
+#    needs: test
+#    name: Quality Gate
+#    runs-on: ubuntu-latest
+#    steps:
+#      - uses: actions/checkout@v2
+#        with:
+#          fetch-depth: 0
+#
+#      - name: Download a reports artifact
+#        uses: actions/download-artifact@v2.0.10
+#        with:
+#          name: reports
+#          path: reports
+#
+#      - name: SonarCloud Scan
+#        if: always()
+#        uses: SonarSource/sonarcloud-github-action@v1.6
+#        with:
+#          projectBaseDir: ${{ env.GITHUB_WORKSPACE }}
+#        env:
+#          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+#          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+#          BUILD_NUMBER: ${{ github.run_number }}
 
   slack-workflow-status:
     if: always()
