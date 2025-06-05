@@ -130,7 +130,7 @@ jobs:
     needs:
       - test
       - build
-      - sonarcloud
+#      - sonarcloud
     steps:
       - name: Workflow Conclusion Action
         uses: technote-space/workflow-conclusion-action@v2.0.1
