@@ -16,6 +16,8 @@ async function linkUserAccounts(
     providerUserId: string,
     client: CognitoIdentityServiceProvider
 ) {
+    // eslint-disable-next-line no-console
+    console.log('dx:providerName: ', providerName, providerUserId);
     const params = {
         DestinationUser: {
             ProviderAttributeValue: cognitoUsername,
