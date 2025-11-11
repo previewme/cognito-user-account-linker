@@ -30,6 +30,8 @@ async function linkUserAccounts(
         },
         UserPoolId: userPoolId
     };
+    // eslint-disable-next-line no-console
+    console.log('dx:params: ', params);
     await client.adminLinkProviderForUser(params).promise();
 }
 
@@ -81,6 +83,8 @@ export async function handler(event: PreSignUpTriggerEvent): Promise<PreSignUpTr
             }
             await linkUserAccounts(cognitoUsername, userPoolId, providerName, providerUserId, client);
         } else {
+            // eslint-disable-next-line no-console
+            console.log('dx:set new user', userPoolId, email, client);
             const newCognitoUser = await createUser(userPoolId, email, client);
             await setUserPassword(userPoolId, email, client);
 
