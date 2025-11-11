@@ -66,8 +66,13 @@ export async function handler(event: PreSignUpTriggerEvent): Promise<PreSignUpTr
     const userPoolId = event.userPoolId;
     if (event.triggerSource == EXTERNAL_AUTHENTICATION_PROVIDER) {
         const usersFilteredByEmail = await getUsersByEmail(userPoolId, email, client);
+        const providerMap: Record<string, string> = {
+            google: 'Google',
+            facebook: 'Facebook',
+            linkedin: 'LinkedIn'
+        };
         const [providerNameValue, providerUserId] = event.userName.split('_');
-        const providerName = providerNameValue.charAt(0).toUpperCase() + providerNameValue.slice(1);
+        const providerName = providerMap[providerNameValue.toLowerCase()];
 
         if (usersFilteredByEmail.Users && usersFilteredByEmail.Users.length > 0) {
             const cognitoUsername = usersFilteredByEmail.Users[0].Username;
