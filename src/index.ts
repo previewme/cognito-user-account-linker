@@ -78,6 +78,8 @@ export async function handler(event: PreSignUpTriggerEvent): Promise<PreSignUpTr
 
         if (usersFilteredByEmail.Users && usersFilteredByEmail.Users.length > 0) {
             const cognitoUsername = usersFilteredByEmail.Users[0].Username;
+            // eslint-disable-next-line no-console
+            console.log('dx:use existing', cognitoUsername, email, client);
             if (cognitoUsername === undefined) {
                 throw Error('Username not found');
             }
