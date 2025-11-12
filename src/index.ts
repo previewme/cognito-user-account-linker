@@ -77,11 +77,11 @@ export async function handler(event: PreSignUpTriggerEvent): Promise<PreSignUpTr
         const providerName = providerMap[providerNameValue.toLowerCase()];
 
         // Skip LinkedIn OIDC because linking happens in post-confirmation
-        if (providerName === 'LinkedIn') {
-            // eslint-disable-next-line no-console
-            console.log('dx:Skipping LinkedIn in PreSignUp_ExternalProvider');
-            return event;
-        }
+        // if (providerName === 'LinkedIn') {
+        //     // eslint-disable-next-line no-console
+        //     console.log('dx:Skipping LinkedIn in PreSignUp_ExternalProvider');
+        //     return event;
+        // }
 
         if (usersFilteredByEmail.Users && usersFilteredByEmail.Users.length > 0) {
             const cognitoUsername = usersFilteredByEmail.Users[0].Username;
