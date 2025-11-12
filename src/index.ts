@@ -66,43 +66,78 @@ export async function handler(event: PreSignUpTriggerEvent): Promise<PreSignUpTr
     const client = new CognitoIdentityServiceProvider({ region: event.region });
     const email = event.request.userAttributes.email;
     const userPoolId = event.userPoolId;
+
+    // Extract provider info from event.userName
+    const [providerNameValue, providerUserId] = event.userName.split('_');
+
+    const providerMap: Record<string, string> = {
+        google: 'Google',
+        facebook: 'Facebook',
+        linkedin: 'LinkedIn'
+    };
+    const providerName = providerMap[providerNameValue.toLowerCase()] || providerNameValue.charAt(0).toUpperCase() + providerNameValue.slice(1);
+
+    // eslint-disable-next-line no-console
+    console.log('PreSignUp triggered:', { providerName, providerUserId, email });
+
     if (event.triggerSource == EXTERNAL_AUTHENTICATION_PROVIDER) {
         const usersFilteredByEmail = await getUsersByEmail(userPoolId, email, client);
-        const providerMap: Record<string, string> = {
-            google: 'Google',
-            facebook: 'Facebook',
-            linkedin: 'LinkedIn'
-        };
-        const [providerNameValue, providerUserId] = event.userName.split('_');
-        const providerName = providerMap[providerNameValue.toLowerCase()];
-
-        // Skip LinkedIn OIDC because linking happens in post-confirmation
-        // if (providerName === 'LinkedIn') {
-        //     // eslint-disable-next-line no-console
-        //     console.log('dx:Skipping LinkedIn in PreSignUp_ExternalProvider');
-        //     return event;
-        // }
 
         if (usersFilteredByEmail.Users && usersFilteredByEmail.Users.length > 0) {
             const cognitoUsername = usersFilteredByEmail.Users[0].Username;
             // eslint-disable-next-line no-console
-            console.log('dx:use existing', cognitoUsername, email, client);
-            if (cognitoUsername === undefined) {
-                throw Error('Username not found');
-            }
-            await linkUserAccounts(cognitoUsername, userPoolId, providerName, providerUserId, client);
-        } else {
-            // eslint-disable-next-line no-console
-            console.log('dx:set new user', userPoolId, email, client);
-            const newCognitoUser = await createUser(userPoolId, email, client);
-            await setUserPassword(userPoolId, email, client);
+            console.log('dx:Existing user found:', cognitoUsername, email);
+            if (cognitoUsername) {
+                // Determine if the existing user is federated or native
+                const isFederated = cognitoUsername.includes('_');
+                let destinationProviderName: string;
+                let destinationProviderValue: string;
 
-            const cognitoNativeUsername = newCognitoUser.User?.Username;
-            if (cognitoNativeUsername === undefined) {
-                throw Error('Username not found');
+                if (isFederated) {
+                    // Federated existing user
+                    const [existingProviderName, existingProviderUserId] = cognitoUsername.split('_');
+                    destinationProviderName = existingProviderName;
+                    destinationProviderValue = existingProviderUserId;
+                } else {
+                    // Native existing user
+                    destinationProviderName = 'Cognito';
+                    destinationProviderValue = cognitoUsername;
+                }
+
+                const destinationUser = {
+                    ProviderName: destinationProviderName,
+                    ProviderAttributeValue: destinationProviderValue
+                };
+
+                const sourceUser = {
+                    ProviderName: providerName,
+                    ProviderAttributeName: 'Cognito_Subject',
+                    ProviderAttributeValue: providerUserId
+                };
+
+                try {
+                    await client
+                        .adminLinkProviderForUser({ UserPoolId: userPoolId, DestinationUser: destinationUser, SourceUser: sourceUser })
+                        .promise();
+                    // eslint-disable-next-line no-console
+                    console.log(`Linked ${providerName} to existing user ${cognitoUsername}`);
+                } catch (linkErr: any) {
+                    console.error('Error linking provider:', linkErr.message);
+                    throw linkErr;
+                }
+                // Skip creating new user
+                event.response.autoConfirmUser = true;
+                event.response.autoVerifyEmail = true;
+                return event;
             }
-            await linkUserAccounts(cognitoNativeUsername, userPoolId, providerName, providerUserId, client);
         }
+
+        // 3️⃣ No existing user found → let Cognito create new federated user
+        // eslint-disable-next-line no-console
+        console.log('No existing user found, allowing Cognito to create new user');
+        event.response.autoConfirmUser = true;
+        event.response.autoVerifyEmail = true;
+        return event;
     }
     return event;
 }
