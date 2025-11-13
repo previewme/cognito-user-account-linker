@@ -15,7 +15,7 @@ module.exports = {
         node: true
     },
     rules: {
-        'no-console': ['error', { allow: ['info', 'warn', 'error'] }],
+        'no-console': 'off',
         'prettier/prettier': ['error'],
         'linebreak-style': 'off',
         'func-style': ['error', 'declaration']

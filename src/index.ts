@@ -1,108 +1,297 @@
+// preSignUpExternal.ts
 import { PreSignUpTriggerEvent } from 'aws-lambda';
-import { CognitoIdentityServiceProvider } from 'aws-sdk';
-import { AdminCreateUserResponse, ListUsersResponse } from 'aws-sdk/clients/cognitoidentityserviceprovider';
+import AWS from 'aws-sdk';
 import { generate } from 'generate-password';
 
+// --- CONSTANTS AND TYPES ---
+
 const EXTERNAL_AUTHENTICATION_PROVIDER = 'PreSignUp_ExternalProvider';
+const COGNITO_SUBJECT_ATTRIBUTE = 'Cognito_Subject';
 
-async function getUsersByEmail(userPoolId: string, email: string, client: CognitoIdentityServiceProvider): Promise<ListUsersResponse> {
-    return client.listUsers({ UserPoolId: userPoolId, Filter: `email = "${email}"` }).promise();
+interface Identity {
+    providerName: string;
+    userId: string;
+    issuer?: string;
+    primary?: boolean;
 }
 
-async function linkUserAccounts(
-    cognitoUsername: string,
-    userPoolId: string,
-    providerName: string,
-    providerUserId: string,
-    client: CognitoIdentityServiceProvider
-) {
-    // eslint-disable-next-line no-console
-    console.log('dx:providerName: ', providerName, providerUserId);
-    const params = {
-        DestinationUser: {
-            ProviderAttributeValue: cognitoUsername,
-            ProviderName: 'Cognito'
-        },
-        SourceUser: {
-            ProviderAttributeName: 'Cognito_Subject',
-            ProviderAttributeValue: providerUserId,
-            ProviderName: providerName
-        },
-        UserPoolId: userPoolId
+// --- DEPENDENCIES (Outside Handler for re-use/mocking) ---
+
+// Initialize client outside the handler to take advantage of cold starts
+const client = new AWS.CognitoIdentityServiceProvider();
+
+// --- HELPER FUNCTIONS ---
+
+/**
+ * Maps raw provider values (e.g., 'google', 'facebook') to Cognito's standard ProviderName (e.g., 'Google', 'Facebook').
+ */
+function getProviderName(rawProviderValue: string): string {
+    const providerMap: Record<string, string> = {
+        google: 'Google',
+        facebook: 'Facebook',
+        linkedin: 'LinkedIn'
     };
-    // eslint-disable-next-line no-console
-    console.log('dx:params: ', params);
-    await client.adminLinkProviderForUser(params).promise();
+    const lowerValue = rawProviderValue.toLowerCase();
+    return providerMap[lowerValue] || rawProviderValue;
 }
 
-async function createUser(userPoolId: string, email: string, client: CognitoIdentityServiceProvider): Promise<AdminCreateUserResponse> {
-    return await client
+/**
+ * Extracts the provider name and user ID from the event.userName.
+ * e.g., 'google_12345' -> { providerName: 'Google', providerUserId: '12345' }
+ */
+function parseSourceUser({ userName }: { userName?: string }): { providerName: string; providerUserId: string } | null {
+    if (!userName) return null;
+
+    const userNameParts = userName.split('_');
+    if (userNameParts.length < 2) {
+        console.error('dx: unexpected event.userName format:', userName);
+        return null;
+    }
+    const rawProviderValue = userNameParts[0];
+    const providerUserId = userNameParts.slice(1).join('_');
+
+    const providerName = getProviderName(rawProviderValue);
+
+    return { providerName, providerUserId };
+}
+
+/**
+ * Implements the adminLinkProviderForUser API call.
+ * This is the functional style helper for the core API call.
+ */
+async function linkProviderForUser({
+    userPoolId,
+    sourceProviderName,
+    sourceProviderUserId,
+    destinationProviderName,
+    destinationProviderValue
+}: {
+    userPoolId: string;
+    sourceProviderName: string;
+    sourceProviderUserId: string;
+    destinationProviderName: string;
+    destinationProviderValue: string;
+}): Promise<'success' | 'skipped'> {
+    const source = `${sourceProviderName}_${sourceProviderUserId}`;
+
+    try {
+        await client
+            .adminLinkProviderForUser({
+                UserPoolId: userPoolId,
+                DestinationUser: {
+                    ProviderName: destinationProviderName,
+                    ProviderAttributeValue: destinationProviderValue
+                },
+                SourceUser: {
+                    ProviderName: sourceProviderName,
+                    ProviderAttributeName: COGNITO_SUBJECT_ATTRIBUTE,
+                    ProviderAttributeValue: sourceProviderUserId
+                }
+            })
+            .promise();
+
+        console.log('dx: adminLinkProviderForUser succeeded', {
+            destinationProviderName,
+            destinationProviderValue,
+            source
+        });
+        return 'success';
+    } catch (err: any) {
+        // Handle the specific, known warning/skip case
+        if (err.code === 'InvalidParameterException' && String(err.message).includes('Merging is not currently supported')) {
+            console.warn('dx: Link skipped - already linked or confirmed user:', err.message);
+            return 'skipped';
+        }
+
+        // For all other errors, throw the original error
+        console.error('dx: adminLinkProviderForUser error:', err);
+        throw err;
+    }
+}
+
+/**
+ * Resolves the destination user's provider/value for linking,
+ * handling the split for external provider usernames.
+ */
+function resolveDestination(username: string): { providerName: string; providerAttributeValue: string } {
+    if (!username.includes('_')) {
+        // Native Cognito user
+        return { providerName: 'Cognito', providerAttributeValue: username };
+    }
+    // External user from a previous link
+    const [providerName, providerAttributeValue] = username.split('_');
+    return { providerName, providerAttributeValue };
+}
+
+// --- MAIN HANDLER LOGIC ---
+
+export async function handler(event: PreSignUpTriggerEvent): Promise<PreSignUpTriggerEvent> {
+    console.log('dx:PreSignUp event:', JSON.stringify(event, null, 2));
+
+    // 1. Initial Checks and Extraction
+    if (event.triggerSource !== EXTERNAL_AUTHENTICATION_PROVIDER) {
+        console.log('dx: not an external provider signup. skipping.');
+        return event;
+    }
+
+    const { userPoolId } = event;
+    const emailRaw = event.request?.userAttributes?.email;
+    const sourceUser = parseSourceUser(event);
+
+    if (!emailRaw) {
+        console.warn('dx: no email in event.request.userAttributes; skipping');
+        return event;
+    }
+    const email = emailRaw.toLowerCase();
+
+    if (!sourceUser) {
+        return event; // Error logged in helper
+    }
+    const { providerName, providerUserId } = sourceUser;
+
+    console.log('dx: providerName:', providerName, 'providerUserId:', providerUserId, 'email:', email);
+
+    // 2. List existing users by email
+    const listResp = await client
+        .listUsers({
+            UserPoolId: userPoolId,
+            Filter: `email = "${email}"`,
+            Limit: 5
+        })
+        .promise();
+
+    const existingUsers = listResp.Users || [];
+    console.log('dx: existingUsers count:', existingUsers.length);
+
+    // 3. Handle Existing User Found
+    if (existingUsers.length > 0) {
+        // Choose the native Cognito user if available, otherwise the first
+        const destination = existingUsers.find((u) => !String(u.Username).includes('_')) || existingUsers[0];
+        const destinationUsername = destination.Username!;
+        console.log('dx: chosen destination Username:', destinationUsername);
+
+        // Get full attributes to inspect identities
+        let destFull: any;
+        try {
+            destFull = await client
+                .adminGetUser({
+                    UserPoolId: userPoolId,
+                    Username: destinationUsername
+                })
+                .promise();
+        } catch (err) {
+            console.warn('dx: AdminGetUser failed, falling back to ListUsers data', err);
+            destFull = destination;
+        }
+
+        const attrs = destFull?.UserAttributes || (destination.Attributes as AWS.CognitoIdentityServiceProvider.AttributeListType) || [];
+        const identitiesAttr = attrs.find((a: any) => a.Name === 'identities');
+        let identities: Identity[] = [];
+
+        if (identitiesAttr?.Value) {
+            try {
+                identities = JSON.parse(identitiesAttr.Value);
+            } catch (err) {
+                console.warn('dx: failed to parse identities JSON', err);
+            }
+        }
+
+        const existingIdentity = identities.find((id) => String(id.providerName).toLowerCase() === String(providerName).toLowerCase());
+
+        // A. Existing identity found for this provider
+        if (existingIdentity) {
+            if (String(existingIdentity.userId) === String(providerUserId)) {
+                console.log('dx: Destination already has provider with same userId; skipping link.');
+            } else {
+                console.log('dx: Found stale provider mapping; attempting to disable/unlink stale identity:', existingIdentity.userId);
+                try {
+                    // Attempt to disable the stale identity
+                    await client
+                        .adminDisableProviderForUser({
+                            UserPoolId: userPoolId,
+                            User: {
+                                ProviderName: providerName,
+                                ProviderAttributeValue: String(existingIdentity.userId)
+                            }
+                        })
+                        .promise();
+                    console.log('dx: AdminDisableProviderForUser succeeded for stale identity', existingIdentity.userId);
+                } catch (err) {
+                    console.warn('dx: AdminDisableProviderForUser failed (continuing):', err);
+                }
+
+                // Proceed to link the new one
+                const { providerName: destProv, providerAttributeValue: destVal } = resolveDestination(destinationUsername);
+                await linkProviderForUser({
+                    userPoolId,
+                    sourceProviderName: providerName,
+                    sourceProviderUserId: providerUserId,
+                    destinationProviderName: destProv,
+                    destinationProviderValue: destVal
+                });
+            }
+        } else {
+            // B. No existing identity for this provider -> link normally
+            console.log('dx: No existing identity for provider found. Linking normally.');
+            const { providerName: destProv, providerAttributeValue: destVal } = resolveDestination(destinationUsername);
+            await linkProviderForUser({
+                userPoolId,
+                sourceProviderName: providerName,
+                sourceProviderUserId: providerUserId,
+                destinationProviderName: destProv,
+                destinationProviderValue: destVal
+            });
+        }
+
+        // Finalize event response
+        event.response = event.response || {};
+        event.response.autoConfirmUser = true;
+        event.response.autoVerifyEmail = true;
+        return event;
+    }
+
+    // 4. Handle No Existing User Found -> Create native Cognito user
+    console.log('dx: No existing user for email; creating native Cognito user to link into');
+
+    const createResp = await client
         .adminCreateUser({
             UserPoolId: userPoolId,
-            MessageAction: 'SUPPRESS',
             Username: email,
+            MessageAction: 'SUPPRESS', // Suppress welcome email
             UserAttributes: [
                 { Name: 'email', Value: email },
                 { Name: 'email_verified', Value: 'true' }
             ]
         })
         .promise();
-}
 
-async function setUserPassword(userPoolId: string, email: string, client: CognitoIdentityServiceProvider) {
+    const newUserUsername = createResp.User?.Username;
+    if (!newUserUsername) {
+        throw new Error('dx: adminCreateUser failed to produce a Username');
+    }
+
+    // Set a permanent random password (required for native users)
     await client
         .adminSetUserPassword({
             UserPoolId: userPoolId,
-            Username: email,
+            Username: newUserUsername,
             Password: generate({ length: 32, numbers: true, symbols: true }),
             Permanent: true
         })
         .promise();
-}
 
-export async function handler(event: PreSignUpTriggerEvent): Promise<PreSignUpTriggerEvent> {
-    // eslint-disable-next-line no-console
-    console.log('dx:event: ', event);
-    const client = new CognitoIdentityServiceProvider({ region: event.region });
-    const email = event.request.userAttributes.email;
-    const userPoolId = event.userPoolId;
-    if (event.triggerSource == EXTERNAL_AUTHENTICATION_PROVIDER) {
-        const usersFilteredByEmail = await getUsersByEmail(userPoolId, email, client);
-        const providerMap: Record<string, string> = {
-            google: 'Google',
-            facebook: 'Facebook',
-            linkedin: 'LinkedIn'
-        };
-        const [providerNameValue, providerUserId] = event.userName.split('_');
-        const providerName = providerMap[providerNameValue.toLowerCase()];
+    // Link the external provider to the newly created native user
+    await linkProviderForUser({
+        userPoolId,
+        sourceProviderName: providerName,
+        sourceProviderUserId: providerUserId,
+        destinationProviderName: 'Cognito',
+        destinationProviderValue: newUserUsername
+    });
 
-        // Skip LinkedIn OIDC because linking happens in post-confirmation
-        if (providerName === 'LinkedIn') {
-            // eslint-disable-next-line no-console
-            console.log('dx:Skipping LinkedIn in PreSignUp_ExternalProvider');
-            return event;
-        }
-
-        if (usersFilteredByEmail.Users && usersFilteredByEmail.Users.length > 0) {
-            const cognitoUsername = usersFilteredByEmail.Users[0].Username;
-            // eslint-disable-next-line no-console
-            console.log('dx:use existing', cognitoUsername, email, client);
-            if (cognitoUsername === undefined) {
-                throw Error('Username not found');
-            }
-            await linkUserAccounts(cognitoUsername, userPoolId, providerName, providerUserId, client);
-        } else {
-            // eslint-disable-next-line no-console
-            console.log('dx:set new user', userPoolId, email, client);
-            const newCognitoUser = await createUser(userPoolId, email, client);
-            await setUserPassword(userPoolId, email, client);
-
-            const cognitoNativeUsername = newCognitoUser.User?.Username;
-            if (cognitoNativeUsername === undefined) {
-                throw Error('Username not found');
-            }
-            await linkUserAccounts(cognitoNativeUsername, userPoolId, providerName, providerUserId, client);
-        }
-    }
+    // Finalize event response
+    event.response = event.response || {};
+    event.response.autoConfirmUser = true;
+    event.response.autoVerifyEmail = true;
     return event;
 }
