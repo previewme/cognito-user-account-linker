@@ -6,7 +6,7 @@ import { generate } from 'generate-password';
 // --- CONSTANTS AND TYPES ---
 
 const EXTERNAL_AUTHENTICATION_PROVIDER = 'PreSignUp_ExternalProvider';
-const COGNITO_SUBJECT_ATTRIBUTE = 'Cognito_Subject';
+const COGNITO_SUBJECT_ATTRIBUTE = 'Cognito:Username';
 
 interface Identity {
     providerName: string;
